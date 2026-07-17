@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RelayMap — React demo (no build)</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  html, body, #root { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+  #root { display: flex; flex-direction: column; }
+  #top { display: flex; gap: 8px; padding: 8px; background: #14161a; color: #e8eaed; align-items: center; }
+  #top input { flex: 1; max-width: 320px; padding: 6px 8px; border-radius: 8px;
+               border: 1px solid #3a3f47; background: #1f232a; color: #e8eaed; }
+  #host { flex: 1; }
+  select, button, .leaflet-container input { padding: 5px 8px; border-radius: 8px; }
+</style>
+<!--
+  This demo runs the REAL RelayMap.jsx / RelayTileLayer.jsx with no build step: it fetches the
+  source files, Babel-compiles the JSX in the browser, rewrites the local imports to blob URLs,
+  and imports the result. Deps (react, react-leaflet, leaflet) load from esm.sh via the import map.
+-->
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+    "leaflet": "https://esm.sh/leaflet@1.9.4",
+    "react-leaflet": "https://esm.sh/react-leaflet@4.2.1?deps=react@18.3.1,react-dom@18.3.1,leaflet@1.9.4",
+    "@react-leaflet/core": "https://esm.sh/@react-leaflet/core@2.1.0?deps=react@18.3.1,react-dom@18.3.1,leaflet@1.9.4"
+  }
+}
+</script>
+<script src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"></script>
+</head>
+<body>
+<div id="root">
+  <div id="top">
+    <span>Paste an <code>lk_</code> key →</span>
+    <input id="key" placeholder="lk_ key (Bearer token)" />
+  </div>
+  <div id="host"></div>
+</div>
+
+<script>
+(async () => {
+  const text = (f) => fetch(f).then((r) => r.text());
+  const compile = (code) => Babel.transform(code, { presets: ['react'], filename: 'x.jsx' }).code;
+  const blob = (code) => URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+
+  // Compile the component files in dependency order, wiring local imports to blob URLs.
+  const apiUrl = blob(compile(await text('./relay-api.js')));
+  const tileUrl = blob(compile(await text('./RelayTileLayer.jsx')));
+  const mapSrc = (await text('./RelayMap.jsx'))
+    .replace("'./RelayTileLayer.jsx'", JSON.stringify(tileUrl))
+    .replace("'./relay-api.js'", JSON.stringify(apiUrl));
+  const mapUrl = blob(compile(mapSrc));
+
+  // Tiny host that re-renders RelayMap as you type a key.
+  const appSrc = `
+    import React, { useState } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { RelayMap } from ${JSON.stringify(mapUrl)};
+    function App() {
+      const [key, setKey] = useState('');
+      React.useEffect(() => {
+        const el = document.getElementById('key');
+        const h = () => setKey(el.value.trim());
+        el.addEventListener('change', h); return () => el.removeEventListener('change', h);
+      }, []);
+      return React.createElement('div', { style: { height: '100%' } },
+        key ? React.createElement(RelayMap, { lkKey: key })
+            : React.createElement('div', { style: { padding: 24, color: '#666' } },
+                'Enter an lk_ key above to load the map.'));
+    }
+    createRoot(document.getElementById('host')).render(React.createElement(App));
+  `;
+  await import(blob(compile(appSrc)));
+})().catch((e) => { document.getElementById('host').textContent = 'Demo failed to load: ' + e.message; });
+</script>
+</body>
+</html>
