@@ -31,7 +31,7 @@ function MapWiring({ onAddAt, onReady }) {
 
 export function RelayMap({
   lkKey, base = DEFAULT_BASE, center = FALLBACK_CENTER, zoom = 14,
-  defaultMapType = 'roadmap', lang, ipSeedOnLoad = true, style,
+  defaultMapType = 'roadmap', lang, ipSeedOnLoad = true, typeahead = false, style,
 }) {
   const [map, setMap] = useState(null);
   const [mapType, setMapType] = useState(defaultMapType);
@@ -84,11 +84,21 @@ export function RelayMap({
     ipLocate().then((p) => { if (p) map.setView(p, zoom); });
   }, [map, ipSeedOnLoad, zoom]);
 
-  const doSearch = useCallback(async () => {
-    if (!q.trim() || !lkKey) return;
-    try { setResults(await placesSearch(base, lkKey, q.trim(), near(), lang)); }
+  const doSearch = useCallback(async (query) => {
+    const text = (query ?? q).trim();
+    if (!text || !lkKey) return;
+    try { setResults(await placesSearch(base, lkKey, text, near(), lang)); }
     catch (_) { setResults([]); }
   }, [q, lkKey, base, near, lang]);
+
+  // Unit 9: opt-in debounced typeahead (default off — each call bills a Text Search; guide §2.4).
+  const typeaheadTimer = React.useRef(null);
+  const onQChange = useCallback((v) => {
+    setQ(v);
+    if (!typeahead) return;
+    clearTimeout(typeaheadTimer.current);
+    typeaheadTimer.current = setTimeout(() => { if (v.trim().length >= 3) doSearch(v); }, 350);
+  }, [typeahead, doSearch]);
 
   const pick = useCallback((cand) => {
     addCircle(cand.lat, cand.lng, cand.suggested_radius_m || DEFAULT_R);
@@ -111,7 +121,7 @@ export function RelayMap({
           <option value="terrain">Terrain</option><option value="hybrid">Hybrid</option>
         </select>
         <input value={q} placeholder="Search place / address"
-               onChange={(e) => setQ(e.target.value)}
+               onChange={(e) => onQChange(e.target.value)}
                onKeyDown={(e) => { if (e.key === 'Enter') doSearch(); }} />
         <button onClick={doSearch}>Search</button>
         <button onClick={locate}>📍</button>

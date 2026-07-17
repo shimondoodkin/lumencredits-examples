@@ -42,9 +42,10 @@ export default function App() {
 
 `lkKey` (required), `base` (default `https://api.lumencredits.com`), `center` `[lat,lng]`, `zoom`,
 `defaultMapType` (`roadmap|satellite|terrain|hybrid`), `lang`, `ipSeedOnLoad` (default `true`),
-`style`.
+`typeahead` (default `false`), `style`.
 
 Bounds live in `relay-api.js`: `MIN_R=50`, `MAX_R=1000`, `DEFAULT_R=150`, `MAX_CIRCLES=25`.
 
-> No autocomplete endpoint exists (guide §2.4); search is press-Enter. Reverse-geocode runs once per
-> circle selection to label its center.
+> No autocomplete endpoint exists (guide §2.4). Search is press-Enter by default; `typeahead` turns
+> on debounced as-you-type search, but **each debounced call bills a full Text Search** — leave it
+> off unless you accept that cost. Reverse-geocode runs once per circle selection to label its center.
