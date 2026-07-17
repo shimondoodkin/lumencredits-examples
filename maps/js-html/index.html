@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Relay-Tiled Map — vanilla JS demo</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+  #app { display: flex; flex-direction: column; height: 100%; }
+  #bar { display: flex; gap: 8px; align-items: center; padding: 8px; flex-wrap: wrap;
+         background: #14161a; color: #e8eaed; }
+  #bar input, #bar select, #bar button { padding: 6px 8px; border-radius: 8px;
+         border: 1px solid #3a3f47; background: #1f232a; color: #e8eaed; font-size: 13px; }
+  #bar input#key { width: 240px; } #bar input#q { width: 180px; }
+  #bar button { cursor: pointer; }
+  #wrap { position: relative; flex: 1; }
+  #map { position: absolute; inset: 0; }
+  #results { position: absolute; z-index: 500; top: 8px; left: 8px; right: 8px; max-height: 40%;
+         overflow: auto; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px #0005; display: none; }
+  #results div { padding: 8px 10px; border-bottom: 1px solid #eee; cursor: pointer; font-size: 13px; }
+  #results div small { color: #666; display: block; }
+  .pill { position: absolute; z-index: 500; background: #fff; border-radius: 20px; padding: 6px 12px;
+          box-shadow: 0 2px 8px #0005; font-size: 12px; }
+  #spinner { bottom: 12px; left: 50%; transform: translateX(-50%); display: none; }
+  #addr { bottom: 12px; left: 12px; max-width: 60%; display: none; }
+  #attr { bottom: 12px; right: 12px; background: #fff9; font-size: 11px; color: #333; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- The lk_ key is a PREREQUISITE. Obtain it via device login — see the live example at
+       https://lumencredits.com/dashboard/example/map.html -->
+  <div id="bar">
+    <input id="key" placeholder="lk_ key (Bearer token)" />
+    <input id="base" value="https://api.lumencredits.com" size="26" />
+    <select id="mapType">
+      <option value="roadmap">Roadmap</option>
+      <option value="satellite">Satellite</option>
+      <option value="terrain">Terrain</option>
+      <option value="hybrid">Hybrid</option>
+    </select>
+    <input id="q" placeholder="Search place / address" />
+    <button id="searchBtn">Search</button>
+    <button id="locateBtn">📍 Locate</button>
+    <button id="delBtn">Delete selected</button>
+    <label style="opacity:.8"><input type="checkbox" id="typeahead" /> typeahead ($/keystroke)</label>
+    <span style="opacity:.6;font-size:12px">click=add · drag center=move · drag edge=resize · click circle=select</span>
+  </div>
+  <div id="wrap">
+    <div id="map"></div>
+    <div id="results"></div>
+    <div id="spinner" class="pill">Loading map…</div>
+    <div id="addr" class="pill"></div>
+    <div id="attr" class="pill">©Google</div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module">
+import { createRelayMap } from './relay-map.js';
+
+const $ = (id) => document.getElementById(id);
+let rm = null, detachTypeahead = null;
+
+function renderResults(list) {
+  const box = $('results');
+  box.innerHTML = '';
+  box.style.display = list.length ? 'block' : 'none';
+  list.slice(0, 20).forEach((p) => {
+    const el = document.createElement('div');
+    el.innerHTML = `${p.name || p.address}<small>${p.address || ''}</small>`;
+    el.onclick = () => { rm.addFromCandidate(p); box.style.display = 'none'; };
+    box.appendChild(el);
+  });
+}
+
+// (Re)build the map whenever the key or base changes — a fresh key must reach the tile layer.
+function build() {
+  if (rm) { rm.destroy(); rm = null; }
+  if (detachTypeahead) { detachTypeahead(); detachTypeahead = null; }
+  $('map').innerHTML = '';
+  rm = createRelayMap($('map'), {
+    lkKey: $('key').value.trim(),
+    base: $('base').value.trim(),
+    mapType: $('mapType').value,
+    onLoadingChange: (n) => { $('spinner').style.display = n > 0 ? 'block' : 'none'; },
+    onSelect: (c) => {
+      const a = $('addr');
+      if (c && c.address) { a.textContent = c.address; a.style.display = 'block'; }
+      else a.style.display = 'none';
+    },
+  });
+  if ($('typeahead').checked) {
+    detachTypeahead = rm.attachTypeahead($('q'), renderResults);
+  }
+}
+
+$('key').addEventListener('change', build);
+$('base').addEventListener('change', build);
+$('mapType').addEventListener('change', () => rm && rm.setMapType($('mapType').value));
+$('typeahead').addEventListener('change', build);
+$('searchBtn').onclick = async () => { if (rm) renderResults(await rm.search($('q').value.trim())); };
+$('q').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('searchBtn').click(); });
+$('locateBtn').onclick = () => rm && rm.locate();
+$('delBtn').onclick = () => rm && rm.deleteSelected();
+
+build();   // start with an empty key; paste one and the map rebuilds
+</script>
+</body>
+</html>
